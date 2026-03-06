@@ -75,3 +75,59 @@ class TestAsyncTorSocket:
         sock = AsyncTorSocket(mock_tunnel)
         await sock.connect(("example.com", 80))
         mock_tunnel.create_isolated_stream.assert_called_once_with("example.com", 80)
+
+    @pytest.mark.asyncio
+    async def test_connect_already_connected_raises(self, mock_tunnel):
+        sock = AsyncTorSocket(mock_tunnel)
+        await sock.connect(("example.com", 80))
+        with pytest.raises(OSError, match="Already connected"):
+            await sock.connect(("example.com", 80))
+
+    @pytest.mark.asyncio
+    async def test_sendall(self, mock_tunnel):
+        sock = AsyncTorSocket(mock_tunnel)
+        await sock.connect(("example.com", 80))
+        mock_tunnel.create_stream.return_value.send.return_value = 5
+        await sock.sendall(b"hello")
+
+    @pytest.mark.asyncio
+    async def test_sendall_connection_closed(self, mock_tunnel):
+        sock = AsyncTorSocket(mock_tunnel)
+        await sock.connect(("example.com", 80))
+        mock_tunnel.create_stream.return_value.send.return_value = 0
+        with pytest.raises(OSError, match="Connection closed"):
+            await sock.sendall(b"hello")
+
+    @pytest.mark.asyncio
+    async def test_recv_before_connect_raises(self, mock_tunnel):
+        sock = AsyncTorSocket(mock_tunnel)
+        with pytest.raises(OSError, match="Not connected"):
+            await sock.recv(1024)
+
+    @pytest.mark.asyncio
+    async def test_sendall_before_connect_raises(self, mock_tunnel):
+        sock = AsyncTorSocket(mock_tunnel)
+        with pytest.raises(OSError, match="Not connected"):
+            await sock.sendall(b"hello")
+
+    @pytest.mark.asyncio
+    async def test_close_already_closed(self, mock_tunnel):
+        sock = AsyncTorSocket(mock_tunnel)
+        await sock.close()
+        await sock.close()  # Second close should be no-op
+
+    @pytest.mark.asyncio
+    async def test_custom_loop(self, mock_tunnel):
+        import asyncio
+        loop = asyncio.get_running_loop()
+        sock = AsyncTorSocket(mock_tunnel, loop=loop)
+        await sock.connect(("example.com", 80))
+        assert sock._loop is loop
+
+    def test_repr_connected(self, mock_tunnel):
+        # Manually set state to simulate connected
+        sock = AsyncTorSocket(mock_tunnel)
+        sock._stream = MagicMock()
+        sock._remote_addr = ("example.com", 80)
+        assert "connected" in repr(sock)
+        assert "example.com" in repr(sock)

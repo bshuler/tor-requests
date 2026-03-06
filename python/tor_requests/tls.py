@@ -187,7 +187,7 @@ class TorTlsSocket:
         elif "w" in mode:
             return io.BufferedWriter(raw, buffer_size=buffering)
         else:
-            return io.BufferedRWPair(raw, raw, buffer_size=buffering)
+            return io.BufferedRWPair(raw, raw, buffering)
 
     def version(self) -> Optional[str]:
         """Return the TLS protocol version."""

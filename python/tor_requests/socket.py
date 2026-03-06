@@ -164,7 +164,7 @@ class TorSocket:
         elif "w" in mode:
             return io.BufferedWriter(raw, buffer_size=buffering)
         else:
-            return io.BufferedRWPair(raw, raw, buffer_size=buffering)
+            return io.BufferedRWPair(raw, raw, buffering)
 
     def wrap_tls(self, hostname: str, context=None):
         """Wrap this socket with TLS for HTTPS communication."""
