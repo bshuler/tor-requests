@@ -1,4 +1,17 @@
-"""Exception hierarchy for tor-requests."""
+"""Exception hierarchy for tor-requests.
+
+Note: The native Rust extension currently raises standard Python exceptions:
+    - RuntimeError: Tor bootstrap failures, channel errors
+    - ConnectionError: Connection failures, stream/tunnel closed
+    - TimeoutError: Operation timed out
+    - OSError: I/O errors
+    - ValueError: Configuration errors
+
+These custom exception classes are provided for future use and for
+application code that wants a unified exception hierarchy. You can
+catch TorError as a base class in combination with the standard
+exceptions above.
+"""
 
 from __future__ import annotations
 

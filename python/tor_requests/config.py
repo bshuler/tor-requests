@@ -12,7 +12,7 @@ class TorConfig:
 
     Args:
         data_dir: Directory for arti state/cache. Defaults to arti's default (~/.local/share/arti).
-        bridges: List of bridge relay lines for censored networks.
+        bridges: List of bridge relay lines for censored networks (not yet supported).
         isolation: If True, each stream uses a separate circuit for IP isolation.
 
     Examples:
@@ -21,9 +21,6 @@ class TorConfig:
 
         # With circuit isolation (each connection gets a different exit IP):
         config = TorConfig(isolation=True)
-
-        # With bridge relays:
-        config = TorConfig(bridges=["Bridge obfs4 198.51.100.1:443 ..."])
     """
 
     data_dir: Optional[str] = None

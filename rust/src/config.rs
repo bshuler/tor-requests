@@ -38,6 +38,14 @@ impl TorConfig {
         use arti_client::config::TorClientConfigBuilder;
         use std::path::PathBuf;
 
+        if !self.bridges.is_empty() {
+            return Err(crate::error::TorError::Config(
+                "Bridge configuration is not yet supported. \
+                 Remove bridges from TorConfig or use the system Tor daemon instead."
+                    .into(),
+            ));
+        }
+
         let builder = if let Some(dir) = &self.data_dir {
             let path = PathBuf::from(dir);
             TorClientConfigBuilder::from_directories(path.clone(), path)

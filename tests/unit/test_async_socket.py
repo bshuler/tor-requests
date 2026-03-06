@@ -10,10 +10,12 @@ from tor_requests.async_socket import AsyncTorSocket
 def mock_tunnel():
     """Create a mock TorTunnel."""
     tunnel = MagicMock()
+    tunnel._isolation = False
     stream = MagicMock()
     stream.send.return_value = 5
     stream.recv.return_value = b"hello"
     tunnel.create_stream.return_value = stream
+    tunnel.create_isolated_stream.return_value = stream
     return tunnel
 
 
@@ -66,3 +68,10 @@ class TestAsyncTorSocket:
     def test_repr_idle(self, mock_tunnel):
         sock = AsyncTorSocket(mock_tunnel)
         assert "idle" in repr(sock)
+
+    @pytest.mark.asyncio
+    async def test_connect_isolated(self, mock_tunnel):
+        mock_tunnel._isolation = True
+        sock = AsyncTorSocket(mock_tunnel)
+        await sock.connect(("example.com", 80))
+        mock_tunnel.create_isolated_stream.assert_called_once_with("example.com", 80)

@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crossbeam_channel::{bounded, Receiver, Sender};
@@ -24,6 +24,8 @@ pub struct TorStream {
     read_rx: Receiver<std::result::Result<Vec<u8>, String>>,
     /// Whether the stream is still connected.
     connected: Arc<AtomicBool>,
+    /// Buffer for excess data when recv reads more than max_bytes.
+    read_buffer: Mutex<Vec<u8>>,
 }
 
 impl TorStream {
@@ -47,8 +49,8 @@ impl TorStream {
         let read_connected = connected.clone();
         handle.spawn(async move {
             let mut reader = reader;
+            let mut buf = vec![0u8; 16384];
             loop {
-                let mut buf = vec![0u8; 16384];
                 match reader.read(&mut buf).await {
                     Ok(0) => {
                         read_connected.store(false, Ordering::SeqCst);
@@ -56,8 +58,7 @@ impl TorStream {
                         break;
                     }
                     Ok(n) => {
-                        buf.truncate(n);
-                        if read_tx.send(Ok(buf)).is_err() {
+                        if read_tx.send(Ok(buf[..n].to_vec())).is_err() {
                             break;
                         }
                     }
@@ -75,18 +76,25 @@ impl TorStream {
         handle.spawn(async move {
             let mut writer = writer;
             loop {
-                match write_rx.recv() {
-                    Ok(WriteMsg::Data(data)) => {
-                        if let Err(_e) = writer.write_all(&data).await {
+                let msg = {
+                    let rx = write_rx.clone();
+                    match tokio::task::spawn_blocking(move || rx.recv()).await {
+                        Ok(Ok(msg)) => msg,
+                        _ => break,
+                    }
+                };
+                match msg {
+                    WriteMsg::Data(data) => {
+                        if writer.write_all(&data).await.is_err() {
                             write_connected.store(false, Ordering::SeqCst);
                             break;
                         }
-                        if let Err(_e) = writer.flush().await {
+                        if writer.flush().await.is_err() {
                             write_connected.store(false, Ordering::SeqCst);
                             break;
                         }
                     }
-                    Ok(WriteMsg::Close) | Err(_) => {
+                    WriteMsg::Close => {
                         let _ = writer.shutdown().await;
                         break;
                     }
@@ -98,6 +106,7 @@ impl TorStream {
             write_tx,
             read_rx,
             connected,
+            read_buffer: Mutex::new(Vec::new()),
         }
     }
 }
@@ -127,6 +136,16 @@ impl TorStream {
         max_bytes: usize,
         timeout_ms: Option<u64>,
     ) -> PyResult<Bound<'py, PyBytes>> {
+        // Check the read buffer first
+        {
+            let mut buf = self.read_buffer.lock().unwrap();
+            if !buf.is_empty() {
+                let n = std::cmp::min(buf.len(), max_bytes);
+                let data = buf.drain(..n).collect::<Vec<u8>>();
+                return Ok(PyBytes::new_bound(py, &data));
+            }
+        }
+
         let result = py.allow_threads(|| -> Result<Vec<u8>> {
             let data = match timeout_ms {
                 Some(ms) => self
@@ -140,18 +159,19 @@ impl TorStream {
             };
 
             match data {
-                Ok(bytes) => {
-                    if bytes.len() > max_bytes {
-                        Ok(bytes[..max_bytes].to_vec())
-                    } else {
-                        Ok(bytes)
-                    }
-                }
+                Ok(bytes) => Ok(bytes),
                 Err(e) => Err(TorError::Connection(e)),
             }
         })?;
 
-        Ok(PyBytes::new_bound(py, &result))
+        // Buffer excess data
+        if result.len() > max_bytes {
+            let mut buf = self.read_buffer.lock().unwrap();
+            buf.extend_from_slice(&result[max_bytes..]);
+            Ok(PyBytes::new_bound(py, &result[..max_bytes]))
+        } else {
+            Ok(PyBytes::new_bound(py, &result))
+        }
     }
 
     /// Close the stream.

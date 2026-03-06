@@ -93,9 +93,12 @@ class TorTlsSocket:
             try:
                 return self._sslobj.read(bufsize)
             except ssl.SSLWantReadError:
+                self._flush_outgoing()
                 self._pull_incoming()
                 if not self._incoming.pending:
                     return b""
+            except ssl.SSLWantWriteError:
+                self._flush_outgoing()
             except ssl.SSLZeroReturnError:
                 return b""
 
@@ -173,7 +176,7 @@ class TorTlsSocket:
         self._makefile_refs += 1
         raw = _TlsFileWrapper(self)
 
-        if buffering == 0 or ("b" in mode and buffering < 0):
+        if buffering == 0:
             return raw
 
         if buffering < 0:

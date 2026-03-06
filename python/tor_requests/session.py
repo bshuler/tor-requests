@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Optional
 
-from . import _native
 from .config import TorConfig
 from .socket import TorSocket
+
+_create_connection_lock = threading.Lock()
 
 
 def create_session(config: Optional[TorConfig] = None, **kwargs):
@@ -34,6 +36,8 @@ def create_session(config: Optional[TorConfig] = None, **kwargs):
             "Install it with: pip install tor-requests[requests]"
         )
 
+    from . import _native
+
     if config is None:
         config = TorConfig()
 
@@ -59,11 +63,12 @@ def create_session(config: Optional[TorConfig] = None, **kwargs):
                 sock.connect(address)
                 return sock
 
-            urllib3.util.connection.create_connection = tor_create_connection
-            try:
-                return super().send(request, stream, timeout, verify, cert, proxies)
-            finally:
-                urllib3.util.connection.create_connection = original_create_connection
+            with _create_connection_lock:
+                urllib3.util.connection.create_connection = tor_create_connection
+                try:
+                    return super().send(request, stream, timeout, verify, cert, proxies)
+                finally:
+                    urllib3.util.connection.create_connection = original_create_connection
 
     session = requests.Session(**kwargs) if kwargs else requests.Session()
 

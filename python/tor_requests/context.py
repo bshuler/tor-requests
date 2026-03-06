@@ -9,15 +9,13 @@ from __future__ import annotations
 import socket as stdlib_socket
 import ssl as stdlib_ssl
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Iterator, Optional, Type
+from typing import TYPE_CHECKING, Iterator, Optional
 
 if TYPE_CHECKING:
     from ._native import TorTunnel
 
 from .config import TorConfig
 from .socket import TorSocket
-
-_original_socket_class: Optional[Type] = None
 
 
 @contextmanager
@@ -37,13 +35,17 @@ def tor_context(config: Optional[TorConfig] = None) -> Iterator[TorTunnel]:
     Yields:
         The TorTunnel instance.
 
+    Raises:
+        RuntimeError: If tor_context() is called while already active.
+
     Example:
         with tor_context() as tunnel:
             import requests
             r = requests.get("https://check.torproject.org/api/ip")
             print(r.json())  # Shows a Tor exit node IP
     """
-    global _original_socket_class
+    if getattr(stdlib_socket.socket, "_tor_active", False):
+        raise RuntimeError("tor_context() cannot be nested")
 
     from . import _native
     from .tls import TorTlsSocket
@@ -54,12 +56,12 @@ def tor_context(config: Optional[TorConfig] = None) -> Iterator[TorTunnel]:
     native_config = config.to_native()
     tunnel = _native.TorTunnel(native_config)
 
-    _original_socket_class = stdlib_socket.socket
-
-    original = _original_socket_class
+    original = stdlib_socket.socket
 
     class PatchedSocket(original):
         """socket.socket subclass that intercepts TCP connections."""
+
+        _tor_active = True
 
         def __new__(
             cls,
@@ -96,5 +98,4 @@ def tor_context(config: Optional[TorConfig] = None) -> Iterator[TorTunnel]:
     finally:
         stdlib_socket.socket = original
         stdlib_ssl.SSLContext.wrap_socket = original_wrap_socket
-        _original_socket_class = None
         tunnel.close()

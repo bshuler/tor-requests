@@ -153,7 +153,7 @@ class TorSocket:
         self._makefile_refs += 1
         raw = _SocketFileWrapper(self)
 
-        if buffering == 0 or ("b" in mode and buffering < 0):
+        if buffering == 0:
             return raw
 
         if buffering < 0:
