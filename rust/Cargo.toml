@@ -1,0 +1,23 @@
+[package]
+name = "tor-requests-native"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Tor routing for Python via arti-client — native extension"
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+arti-client = { version = "0.27", features = [
+    "tokio", "native-tls",
+    "onion-service-client",
+] }
+tor-rtcompat = { version = "0.27", features = ["tokio", "native-tls"] }
+pyo3 = { version = "0.22", features = ["macros", "extension-module"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "io-util"] }
+crossbeam-channel = "0.5"
+thiserror = "2"
+bytes = "1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
